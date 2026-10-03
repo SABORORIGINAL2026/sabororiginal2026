@@ -206,11 +206,9 @@ main{padding:22px 26px 40px}.tela{display:none}.tela.ativa{display:block}
    Pegue em: Supabase > Project Settings > API
    - URL do projeto
    - Chave "anon public" (pode ficar no site; os dados são protegidos pelo login + RLS)
-   O e-mail abaixo é o do usuário que você cria em Authentication > Users;
-   a senha dele é a "Senha de acesso" que a equipe digita na tela de entrada. */
+   O e-mail e a senha de acesso ficam só no Supabase (Authentication > Users). */
 const SUPABASE_URL="https://krhvxyufmdivwktniadk.supabase.co";
 const SUPABASE_KEY="sb_publishable__8mrqPnbWj4hN3h7OQMUMw_HpNF28e0";
-const LOGIN_EMAIL="sistema@sabororiginal.com";
 /* =================================================== */
 
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -267,7 +265,7 @@ if(SUPABASE_URL.startsWith("COLE_"))return erro("Configure a URL e a chave do Su
 $("btnEntrar").disabled=true;
 try{
 const {error}=await sb.auth.signInWithPassword({email,password:senha});
-if(!error){store("em",email);return start()}
+if(!error)return start()
 $("senha").value="";
 const m=String(error.message||"").toLowerCase();
 if(error.status===429)erro("Muitas tentativas. Aguarde alguns minutos e tente de novo.");
@@ -477,7 +475,6 @@ $("md").className="md on"}
 
 setInterval(()=>{if($("app").style.display==="block")carregarPedidos()},3000);
 setInterval(tick,30000);
-$("email").value=store("em")||LOGIN_EMAIL;
 /* se a sessão do Supabase ainda é válida, entra direto; se cair, volta ao login */
 sb.auth.onAuthStateChange((ev)=>{if(ev==="SIGNED_OUT"&&iniciado)location.reload()});
 if(!SUPABASE_URL.startsWith("COLE_"))sb.auth.getSession().then(({data})=>{if(data&&data.session)start()}).catch(()=>{});
