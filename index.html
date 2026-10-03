@@ -156,7 +156,8 @@ main{padding:22px 26px 40px}.tela{display:none}.tela.ativa{display:block}
 <div id="caG"></div>
 <div class="opt"><label>Observação (opcional)</label><textarea id="obsG" rows="2" placeholder="Ex.: sem cebola, carne bem passada"></textarea></div>
 <div class="tot"><span>Total</span><b id="toG">R$ 0,00</b></div>
-<button class="btn big" onclick="enviarPedido()">Enviar à cozinha</button></aside></div>
+<button class="btn big" onclick="enviarPedido()">Enviar à cozinha</button>
+<button class="btn ghost big" style="margin-top:8px" onclick="enviarPedido(true)">🖨️ Enviar e imprimir comanda</button></aside></div>
 <button id="fab" class="fab" onclick="document.querySelector('#garcom aside').scrollIntoView({behavior:'smooth'})"><span>Ver pedido</span><b id="fabT"></b></button>
 </section>
 
@@ -165,7 +166,8 @@ main{padding:22px 26px 40px}.tela{display:none}.tela.ativa{display:block}
 <p class="mut" style="margin-bottom:12px">Escreva o pedido como no caderno. A anotação vai direto para a cozinha e o caixa lança os valores na hora de receber.</p>
 <div class="row2"><div><label>Mesa</label><input id="cdMesa" inputmode="numeric" placeholder="Ex.: 05"></div><div><label>Garçom</label><input id="cdGarcom" placeholder="Seu nome"></div></div>
 <div class="opt"><label>Anotação</label><textarea id="cdTxt" rows="9" placeholder="Ex.: 2 peixadas, 1 porção de batata, 3 cervejas..."></textarea></div>
-<button class="btn big" onclick="enviarCaderno()">Enviar à cozinha</button></div>
+<button class="btn big" onclick="enviarCaderno()">Enviar à cozinha</button>
+<button class="btn ghost big" style="margin-top:8px" onclick="enviarCaderno(true)">🖨️ Enviar e imprimir comanda</button></div>
 <aside class="card"><h3>Anotações em aberto</h3><div id="cdLista" style="margin-top:10px"></div></aside>
 </div></section>
 
@@ -251,9 +253,20 @@ let pedidos=[],last="",MESAS=[],sel=null,HF="todos",CB=null,iniciado=false;
 function toast(m,t){const e=document.createElement("div");e.className="toast "+(t||"");e.textContent=m;$("toasts").appendChild(e);setTimeout(()=>e.remove(),3500)}
 function tick(){$("clock").textContent=new Date().toLocaleString("pt-BR",{weekday:"short",day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"})}
 /* grava um pedido novo no banco */
-async function post(b){try{
+async function postRow(b){try{
 if(b.status==="fechado"&&!b.fechado_em)b.fechado_em=new Date().toISOString();
-const {error}=await sb.from("pedidos").insert(b);return !error}catch(e){return false}}
+const {data,error}=await sb.from("pedidos").insert(b).select().single();return error?null:data}catch(e){return null}}
+async function post(b){return !!await postRow(b)}
+
+/* comanda da cozinha (sem preços) */
+function comandaHTML(p){
+const l=itens(p).map(i=>{const n=String(i.nome);
+return n.startsWith("📝")
+?`<div style="margin:6px 0;padding:4px;border:1px solid #000;white-space:pre-wrap"><b>${esc(n.replace(/^📝\s*/,"").replace(/^Obs:/,"OBS:"))}</b></div>`
+:`<div style="font-size:16px;font-weight:bold;margin:4px 0">${i.quantidade||1}x ${esc(n)}</div>`}).join("");
+return `<center><b style="font-size:18px">COMANDA</b><br>Sabor Original</center><hr><div style="font-size:28px;font-weight:bold;text-align:center">MESA ${esc(p.mesa)}</div><hr>Pedido #${p.id} · ${fdt(p)}<br>Garçom: ${esc(p.garcom||"-")}<hr>${l}<hr><center>*** COZINHA ***</center>`}
+function imprimirComanda(p){$("print").innerHTML=comandaHTML(p);window.print()}
+function comandaDe(id){const p=pedidos.find(x=>x.id==id);if(p)imprimirComanda(p)}
 
 /* acesso: login pelo Supabase Auth (a senha é validada pelo Supabase) */
 function erro(m){$("erro").textContent=m;$("erro").style.display="block"}
@@ -310,30 +323,32 @@ if(k==="C")troco("C")}
 function limparG(){S.G.cart=[];$("obsG").value="";cart("G");prods("G")}
 
 /* garçom */
-async function enviarPedido(){
+async function enviarPedido(imp){
 const mesa=$("mesa").value.trim(),g=$("garcomNome").value.trim(),c=S.G.cart,obs=$("obsG").value.trim();
 if(!mesa)return toast("Informe o número da mesa.","er");
 if(!g)return toast("Informe o nome do garçom.","er");
 if(!c.length)return toast("Adicione ao menos um item.","er");
 store("gn",g);
 const lista=obs?[...c,{nome:"📝 Obs: "+obs,preco:0,quantidade:1}]:c;
-if(!await post({mesa,garcom:g,itens:JSON.stringify(lista),total:sum(c)}))return toast("Erro ao enviar o pedido. Tente novamente.","er");
+const row=await postRow({mesa,garcom:g,itens:JSON.stringify(lista),total:sum(c)});
+if(!row)return toast("Erro ao enviar o pedido. Tente novamente.","er");
 toast(`Pedido da mesa ${mesa} enviado à cozinha`,"ok");
-$("mesa").value="";limparG();dica();carregarPedidos()}
+$("mesa").value="";limparG();dica();carregarPedidos();if(imp)imprimirComanda(row)}
 function dica(){const m=mk($("mesa").value),e=$("dicaMesa");if(!m){e.innerHTML="";return}
 const l=pedidos.filter(p=>aberto(p)&&mk(p.mesa)===m),k=l.length&&geral(l);
 e.innerHTML=l.length?`<div>Mesa ${esc(m)} tem ${l.length} pedido(s) em aberto: <span class="chip x ${k}">${LBL[k]}</span></div>`:`<div>Mesa ${esc(m)} sem pedidos em aberto.</div>`}
 
 /* caderno */
-async function enviarCaderno(){
+async function enviarCaderno(imp){
 const mesa=$("cdMesa").value.trim(),g=$("cdGarcom").value.trim(),t=$("cdTxt").value.trim();
 if(!mesa)return toast("Informe o número da mesa.","er");
 if(!g)return toast("Informe o nome do garçom.","er");
 if(!t)return toast("Escreva a anotação.","er");
 store("gn",g);
-if(!await post({mesa,garcom:g,itens:JSON.stringify([{nome:"📝 "+t,preco:0,quantidade:1}]),total:0}))return toast("Erro ao enviar a anotação. Tente novamente.","er");
+const row=await postRow({mesa,garcom:g,itens:JSON.stringify([{nome:"📝 "+t,preco:0,quantidade:1}]),total:0});
+if(!row)return toast("Erro ao enviar a anotação. Tente novamente.","er");
 toast(`Anotação da mesa ${mesa} enviada à cozinha`,"ok");
-$("cdTxt").value="";$("cdMesa").value="";carregarPedidos()}
+$("cdTxt").value="";$("cdMesa").value="";carregarPedidos();if(imp)imprimirComanda(row)}
 function notas(){
 const l=pedidos.filter(p=>aberto(p)&&itens(p).length&&itens(p).every(i=>String(i.nome).startsWith("📝"))).sort((a,b)=>b.id-a.id).slice(0,10);
 $("cdLista").innerHTML=l.length?l.map(p=>`<div class="sub"><div class="ph"><b>Mesa ${esc(p.mesa)}</b><span class="chip x ${sc(p)}">${LBL[sc(p)]}</span></div><div class="lines">${itens(p).map(i=>`<div><span>${esc(i.nome)}</span></div>`).join("")}</div></div>`).join(""):'<div class="empty">Nenhuma anotação em aberto.</div>'}
@@ -350,7 +365,7 @@ if(q)l=l.filter(p=>String(p.id).includes(q)||String(p.mesa).toLowerCase().includ
 $("listaPedidos").innerHTML=l.length?l.map(p=>{const s=norm(p),k=sc(p);
 return `<article class="od ${k==="nv"?"":k}"><header><div><b>Mesa ${esc(p.mesa)}</b><small>Pedido #${p.id} · ${esc(p.garcom||"Garçom não informado")}${fdt(p)?" · "+fdt(p):""}</small></div><span class="chip">${LBL[k]}</span></header>
 <div class="lines">${linhas(p)}</div>
-<footer><strong>${R(p.total)}</strong><div class="act">${s!=="em preparo"?`<button onclick="mudar(${p.id},'em preparo')">Preparando</button>`:""}${s!=="pronto"?`<button class="ok" onclick="mudar(${p.id},'pronto')">Pronto</button>`:""}<button class="del" onclick="excluir(${p.id})">Excluir</button></div></footer></article>`}).join(""):'<div class="empty">Nenhum pedido em aberto.</div>'}
+<footer><strong>${R(p.total)}</strong><div class="act">${s!=="em preparo"?`<button onclick="mudar(${p.id},'em preparo')">Preparando</button>`:""}${s!=="pronto"?`<button class="ok" onclick="mudar(${p.id},'pronto')">Pronto</button>`:""}<button onclick="comandaDe(${p.id})">🖨️ Comanda</button><button class="del" onclick="excluir(${p.id})">Excluir</button></div></footer></article>`}).join(""):'<div class="empty">Nenhum pedido em aberto.</div>'}
 async function mudar(id,status){
 try{const {error}=await sb.from("pedidos").update({status}).eq("id",id);if(error)throw error}catch(e){toast("Não foi possível atualizar o pedido.","er")}
 carregarPedidos()}
